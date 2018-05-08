@@ -18,8 +18,11 @@
 #pragma mark - Colors
 
 #define kStandardMinimumBoundsWidth 300.0f
-#define kStandardLineWidth 12.0f
+#define kStandardLineWidth 2.0f
+#define kStandardCornerRadius 1.0f
 #define kStandardCornerSize 50.0f
+#define kFauxLayerCornerRadius 10.0f
+#define kAdjustLayerCornerRadius 10.0f
 #define kAdjustFudge 0.2f  // Because without this, we see a mini gap between edge path and corner path.
 
 #define kEdgeDecay 0.5f
@@ -52,6 +55,7 @@ typedef enum {
 @property(nonatomic, strong, readwrite) CAShapeLayer *topRightLayer;
 @property(nonatomic, strong, readwrite) CAShapeLayer *bottomLeftLayer;
 @property(nonatomic, strong, readwrite) CAShapeLayer *bottomRightLayer;
+
 @property(nonatomic, assign, readwrite) BOOL guidesLockedOn;
 @property(nonatomic, assign, readwrite) float edgeScoreTop;
 @property(nonatomic, assign, readwrite) float edgeScoreRight;
@@ -96,7 +100,7 @@ typedef enum {
     _bottomLeftLayer = [CAShapeLayer layer];
     _bottomRightLayer = [CAShapeLayer layer];
     
-    _fauxCardLayer.cornerRadius = 0.0f;
+    _fauxCardLayer.cornerRadius = kFauxLayerCornerRadius;
     _fauxCardLayer.masksToBounds = YES;
     _fauxCardLayer.borderWidth = 0.0f;
     
@@ -116,7 +120,7 @@ typedef enum {
     _backgroundOverlay.cornerRadius = 0.0f;
     _backgroundOverlay.masksToBounds = YES;
     _backgroundOverlay.borderWidth = 0.0f;
-    _backgroundOverlay.fillColor = [UIColor colorWithWhite:0.0f alpha:0.7f].CGColor;
+    _backgroundOverlay.fillColor = [UIColor colorWithWhite:0.0f alpha:0.5f].CGColor;
     [self addSublayer:_backgroundOverlay];
 
 #if CARDIO_DEBUG
@@ -140,7 +144,7 @@ typedef enum {
     
     for(CAShapeLayer *layer in edgeLayers) {
       layer.frame = CGRectZeroWithSize(self.bounds.size);
-      layer.lineCap = kCALineCapButt;
+      layer.lineCap = kCALineCapRound;
       layer.lineWidth = [self lineWidth];
       layer.fillColor = [UIColor clearColor].CGColor;
       layer.strokeColor = kDefaultGuideColor.CGColor;
@@ -194,14 +198,40 @@ typedef enum {
     default:
       break;
   }
+  
+  // Set start point for path
   CGPathMoveToPoint(path, NULL, pStart.x, pStart.y);
-  CGPathAddLineToPoint(path, NULL, point.x, point.y);
+
+  // Set curved line depending on corner type
+  switch (posType) {
+    case kTopLeft:
+      CGPathAddLineToPoint(path, NULL, point.x - kAdjustLayerCornerRadius, point.y);
+      CGPathAddQuadCurveToPoint(path, NULL, point.x , point.y, point.x, point.y + kAdjustLayerCornerRadius);
+      break;
+    case kTopRight:
+      CGPathAddLineToPoint(path, NULL, point.x - kAdjustLayerCornerRadius, point.y);
+      CGPathAddQuadCurveToPoint(path, NULL, point.x , point.y, point.x, point.y - kAdjustLayerCornerRadius);
+      break;
+    case kBottomLeft:
+      CGPathAddLineToPoint(path, NULL, point.x + kAdjustLayerCornerRadius, point.y);
+      CGPathAddQuadCurveToPoint(path, NULL, point.x , point.y, point.x, point.y + kAdjustLayerCornerRadius);
+      break;
+    case kBottomRight:
+      CGPathAddLineToPoint(path, NULL, point.x + kAdjustLayerCornerRadius, point.y);
+      CGPathAddQuadCurveToPoint(path, NULL, point.x , point.y, point.x, point.y - kAdjustLayerCornerRadius);
+      break;
+    default:
+      break;
+  }
+  
+  // Add final line for path
   CGPathAddLineToPoint(path, NULL, pEnd.x, pEnd.y);
+  
   return path;
 }
 
 - (CGPathRef)newMaskPathForGuideFrame:(CGRect)guideFrame outerFrame:(CGRect)frame {
-
+  
   CGMutablePathRef path = CGPathCreateMutable();
 
   CGPathMoveToPoint(path, NULL, frame.origin.x, frame.origin.y);
@@ -209,10 +239,45 @@ typedef enum {
   CGPathAddLineToPoint(path, NULL, frame.origin.x + frame.size.width, frame.origin.y + frame.size.height);
   CGPathAddLineToPoint(path, NULL, frame.origin.x, frame.origin.y + frame.size.height);
 
-  CGPathMoveToPoint(path, NULL, guideFrame.origin.x, guideFrame.origin.y);
-  CGPathAddLineToPoint(path, NULL, guideFrame.origin.x, guideFrame.origin.y + guideFrame.size.height);
-  CGPathAddLineToPoint(path, NULL, guideFrame.origin.x + guideFrame.size.width, guideFrame.origin.y + guideFrame.size.height);
-  CGPathAddLineToPoint(path, NULL, guideFrame.origin.x + guideFrame.size.width, guideFrame.origin.y);
+  CGPathMoveToPoint(path, NULL, guideFrame.origin.x + kAdjustLayerCornerRadius, guideFrame.origin.y);
+  CGPathAddQuadCurveToPoint(path,
+                            NULL,
+                            guideFrame.origin.x,
+                            guideFrame.origin.y,
+                            guideFrame.origin.x,
+                            guideFrame.origin.y + kAdjustLayerCornerRadius);
+  
+  CGPathAddLineToPoint(path, NULL, guideFrame.origin.x, guideFrame.origin.y + guideFrame.size.height - kAdjustLayerCornerRadius);
+  CGPathAddQuadCurveToPoint(path,
+                            NULL,
+                            guideFrame.origin.x,
+                            guideFrame.origin.y + guideFrame.size.height,
+                            guideFrame.origin.x + kAdjustLayerCornerRadius,
+                            guideFrame.origin.y + guideFrame.size.height);
+  
+  CGPathAddLineToPoint(path,
+                       NULL,
+                       guideFrame.origin.x + guideFrame.size.width - kAdjustLayerCornerRadius,
+                       guideFrame.origin.y + guideFrame.size.height);
+  
+  CGPathAddQuadCurveToPoint(path,
+                            NULL,
+                            guideFrame.origin.x + guideFrame.size.width,
+                            guideFrame.origin.y + guideFrame.size.height,
+                            guideFrame.origin.x + guideFrame.size.width,
+                            guideFrame.origin.y + guideFrame.size.height - kAdjustLayerCornerRadius);
+  
+  CGPathAddLineToPoint(path,
+                       NULL,
+                       guideFrame.origin.x + guideFrame.size.width,
+                       guideFrame.origin.y + kAdjustLayerCornerRadius);
+  
+  CGPathAddQuadCurveToPoint(path,
+                            NULL,
+                            guideFrame.origin.x + guideFrame.size.width,
+                            guideFrame.origin.y,
+                            guideFrame.origin.x + guideFrame.size.width - kAdjustLayerCornerRadius,
+                            guideFrame.origin.y);
 
   return path;
 }
@@ -526,11 +591,7 @@ typedef enum {
 
 - (void)showCardFound:(BOOL)found {
   self.guidesLockedOn = found;
-  if (found) {
-    self.backgroundOverlay.fillColor = [UIColor colorWithWhite:0.0f alpha:0.8f].CGColor;
-  } else {
-    self.backgroundOverlay.fillColor = [UIColor colorWithWhite:0.0f alpha:0.0f].CGColor;
-  }
+
   [self updateStrokes];
 }
 
